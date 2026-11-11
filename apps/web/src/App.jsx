@@ -34,6 +34,16 @@ function App() {
   const [search, setSearch] = useState("");
   const [basket, setBasket] = useState([]);
 
+const [checkoutOpen, setCheckoutOpen] = useState(false);
+const [paymentMethod, setPaymentMethod] = useState("cash");
+const [amountPaid, setAmountPaid] = useState("0");
+const [cashAmount, setCashAmount] = useState("0");
+const [mobileAmount, setMobileAmount] = useState("0");
+const [customerName, setCustomerName] = useState("");
+const [mobileReference, setMobileReference] = useState("");
+const [completedSale, setCompletedSale] = useState(null);
+
+
   const currentArea = areas.find((area) => area.id === selectedArea);
 
   const visibleProducts = products.filter((product) => {
@@ -52,6 +62,38 @@ function App() {
     (sum, item) => sum + item.price * item.quantity,
     0
   );
+
+const cashPaid =
+  paymentMethod === "cash"
+    ? Number(amountPaid) || 0
+    : paymentMethod === "split"
+      ? Number(cashAmount) || 0
+      : 0;
+
+const mobilePaid =
+  paymentMethod === "mobile_money"
+    ? Number(amountPaid) || 0
+    : paymentMethod === "split"
+      ? Number(mobileAmount) || 0
+      : 0;
+
+const paidTotal = paymentMethod === "credit" ? 0 : cashPaid + mobilePaid;
+
+const outstandingBalance = Math.max(0, totalPrice - paidTotal);
+
+const changeDue =
+  paymentMethod === "cash"
+    ? Math.max(0, paidTotal - totalPrice)
+    : 0;
+
+const requiresCustomer = outstandingBalance > 0;
+const requiresMobileReference = mobilePaid > 0;
+
+const invalidPayment =
+  paidTotal > totalPrice ||
+  (requiresCustomer && !customerName.trim()) ||
+  (requiresMobileReference && !mobileReference.trim());
+
 
   function chooseArea(area) {
     setSelectedArea(area.id);
@@ -89,6 +131,40 @@ function App() {
         .filter((item) => item.quantity > 0)
     );
   }
+
+function openCheckout() {
+  setPaymentMethod("cash");
+  setAmountPaid(String(totalPrice));
+  setCashAmount("0");
+  setMobileAmount("0");
+  setCustomerName("");
+  setMobileReference("");
+  setCompletedSale(null);
+  setCheckoutOpen(true);
+}
+
+function confirmSale() {
+  if (basket.length === 0 || invalidPayment) return;
+
+  const sale = {
+    reference: `DEMO-${Date.now()}`,
+    items: [...basket],
+    total: totalPrice,
+    cashPaid,
+    mobilePaid,
+    paid: paidTotal,
+    balance: outstandingBalance,
+    change: changeDue,
+    method: paymentMethod,
+    customer: customerName.trim(),
+    mobileReference: mobileReference.trim(),
+    createdAt: new Date().toLocaleString(),
+  };
+
+  setCompletedSale(sale);
+  setBasket([]);
+}
+
 
   return (
     <div className="app-shell">
@@ -323,13 +399,239 @@ function App() {
                 <span>Total</span>
                 <strong>{formatMoney(totalPrice)}</strong>
               </div>
-              <button className="checkout-button" disabled={basket.length === 0}>
-                Continue to checkout <span>→</span>
+              <button
+                className="checkout-button"
+                disabled={basket.length === 0}
+                onClick={openCheckout}
+   >
+                 Continue to checkout <span>→</span>
               </button>
               <p className="basket-note">Prices are shown in Rwandan francs (RWF).</p>
             </div>
           </aside>
         </section>
+
+        {checkoutOpen && (
+  <div className="checkout-overlay">
+    <div className="checkout-modal">
+      {!completedSale ? (
+        <>
+          <div className="checkout-header">
+            <div>
+              <span className="eyebrow">SELLING MODE</span>
+              <h2>Complete your sale</h2>
+              <p>Review the payment before confirming.</p>
+            </div>
+            <button
+              className="close-button"
+              onClick={() => setCheckoutOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="checkout-total">
+            <span>Total amount</span>
+            <strong>{formatMoney(totalPrice)}</strong>
+          </div>
+
+          <h3>Choose payment method</h3>
+
+          <div className="payment-options">
+            {[
+              { id: "cash", label: "Cash", icon: "💵" },
+              { id: "mobile_money", label: "Mobile Money", icon: "📱" },
+              { id: "credit", label: "Credit", icon: "📝" },
+              { id: "split", label: "Split payment", icon: "⇄" },
+            ].map((method) => (
+              <button
+                key={method.id}
+                className={`payment-option ${
+                  paymentMethod === method.id ? "selected" : ""
+                }`}
+                onClick={() => setPaymentMethod(method.id)}
+              >
+                <span>{method.icon}</span>
+                <strong>{method.label}</strong>
+              </button>
+            ))}
+          </div>
+
+          {(paymentMethod === "cash" ||
+            paymentMethod === "mobile_money") && (
+            <label className="checkout-field">
+              {paymentMethod === "cash"
+                ? "Cash received (RWF)"
+                : "Mobile Money received (RWF)"}
+              <input
+                type="number"
+                min="0"
+                value={amountPaid}
+                onChange={(event) => setAmountPaid(event.target.value)}
+              />
+            </label>
+          )}
+
+          {paymentMethod === "split" && (
+            <div className="split-fields">
+              <label className="checkout-field">
+                Cash amount (RWF)
+                <input
+                  type="number"
+                  min="0"
+                  value={cashAmount}
+                  onChange={(event) => setCashAmount(event.target.value)}
+                />
+              </label>
+
+              <label className="checkout-field">
+                Mobile Money amount (RWF)
+                <input
+                  type="number"
+                  min="0"
+                  value={mobileAmount}
+                  onChange={(event) => setMobileAmount(event.target.value)}
+                />
+              </label>
+            </div>
+          )}
+
+          {requiresMobileReference && (
+            <label className="checkout-field">
+              Mobile Money transaction reference
+              <input
+                type="text"
+                placeholder="Enter payment reference"
+                value={mobileReference}
+                onChange={(event) => setMobileReference(event.target.value)}
+              />
+            </label>
+          )}
+
+          {requiresCustomer && (
+            <label className="checkout-field">
+              Customer name or familiar nickname
+              <input
+                type="text"
+                placeholder="Enter customer name"
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+              />
+            </label>
+          )}
+
+          <div className="payment-summary">
+            <div>
+              <span>Amount paid</span>
+              <strong>{formatMoney(paidTotal)}</strong>
+            </div>
+            <div>
+              <span>Outstanding balance</span>
+              <strong>{formatMoney(outstandingBalance)}</strong>
+            </div>
+            {changeDue > 0 && (
+              <div>
+                <span>Change to return</span>
+                <strong>{formatMoney(changeDue)}</strong>
+              </div>
+            )}
+          </div>
+
+          {invalidPayment && (
+            <p className="payment-error">
+              Check the payment amount, customer name and Mobile Money
+              reference before continuing.
+            </p>
+          )}
+
+          <button
+            className="checkout-button confirm-button"
+            disabled={invalidPayment}
+            onClick={confirmSale}
+          >
+            Confirm sale
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="receipt-success">
+            <div>✓</div>
+            <h2>Sale completed!</h2>
+            <p>Your demonstration receipt is ready.</p>
+          </div>
+
+          <div className="receipt">
+            <h3>Karibu Boutique</h3>
+            <p>SALES RECEIPT</p>
+            <div className="receipt-divider" />
+
+            <div className="receipt-row">
+              <span>Reference</span>
+              <strong>{completedSale.reference}</strong>
+            </div>
+            <div className="receipt-row">
+              <span>Date</span>
+              <strong>{completedSale.createdAt}</strong>
+            </div>
+            {completedSale.customer && (
+              <div className="receipt-row">
+                <span>Customer</span>
+                <strong>{completedSale.customer}</strong>
+              </div>
+            )}
+
+            <div className="receipt-divider" />
+
+            {completedSale.items.map((item) => (
+              <div className="receipt-row" key={item.id}>
+                <span>
+                  {item.name} × {item.quantity}
+                </span>
+                <strong>
+                  {formatMoney(item.price * item.quantity)}
+                </strong>
+              </div>
+            ))}
+
+            <div className="receipt-divider" />
+
+            <div className="receipt-row">
+              <span>Total</span>
+              <strong>{formatMoney(completedSale.total)}</strong>
+            </div>
+            <div className="receipt-row">
+              <span>Cash received</span>
+              <strong>{formatMoney(completedSale.cashPaid)}</strong>
+            </div>
+            <div className="receipt-row">
+              <span>Mobile Money received</span>
+              <strong>{formatMoney(completedSale.mobilePaid)}</strong>
+            </div>
+            <div className="receipt-row">
+              <span>Outstanding credit</span>
+              <strong>{formatMoney(completedSale.balance)}</strong>
+            </div>
+            {completedSale.change > 0 && (
+              <div className="receipt-row">
+                <span>Change returned</span>
+                <strong>{formatMoney(completedSale.change)}</strong>
+              </div>
+            )}
+          </div>
+
+          <button
+            className="checkout-button"
+            onClick={() => setCheckoutOpen(false)}
+          >
+            Finish and return to shop
+          </button>
+        </>
+      )}
+    </div>
+  </div>
+)}
+
+        
       </main>
     </div>
   );
