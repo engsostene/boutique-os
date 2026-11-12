@@ -65,6 +65,13 @@ function App() {
   // Stores the completed demonstration sale for receipt display.
   const [completedSale, setCompletedSale] = useState(null);
 
+  // Temporarily keep completed sales during the current application session.
+  // Later, this history will come from our database.
+  const [salesHistory, setSalesHistory] = useState([]);
+
+  // Track which workspace the seller is currently viewing.
+  const [activePage, setActivePage] = useState("digital-shop");
+
 
   const currentArea = areas.find((area) => area.id === selectedArea);
 
@@ -204,6 +211,9 @@ function confirmSale() {
 
   setCompletedSale(sale);
   setBasket([]);
+
+  // Add the newest completed sale to the beginning of sales history.
+  setSalesHistory((previousSales) => [sale, ...previousSales]);
 }
 
 // Open the browser's print dialogue for the completed receipt.
@@ -225,27 +235,38 @@ function printReceipt() {
 
         <div className="sidebar-label">WORKSPACE</div>
 
-        <button className="nav-item active">
-          <span>▦</span> Digital Shop
-        </button>
-        <button className="nav-item">
-          <span>▤</span> Sales
-        </button>
-        <button className="nav-item">
-          <span>♙</span> Customers
-        </button>
+{/* Main workspace navigation. */}
+<button
+  className={`nav-item ${activePage === "digital-shop" ? "active" : ""}`}
+  onClick={() => setActivePage("digital-shop")}
+>
+  <span>▦</span> Digital Shop
+</button>
 
-        <div className="sidebar-label management-label">MANAGEMENT</div>
+<button
+  className={`nav-item ${activePage === "sales" ? "active" : ""}`}
+  onClick={() => setActivePage("sales")}
+>
+  <span>▤</span> Sales
+</button>
 
-        <button className="nav-item">
-          <span>▧</span> Products
-        </button>
-        <button className="nav-item">
-          <span>▥</span> Inventory
-        </button>
-        <button className="nav-item">
-          <span>▨</span> Reports
-        </button>
+<button className="nav-item">
+  <span>♙</span> Customers
+</button>
+
+<div className="sidebar-label management-label">MANAGEMENT</div>
+
+<button className="nav-item">
+  <span>▧</span> Products
+</button>
+
+<button className="nav-item">
+  <span>▥</span> Inventory
+</button>
+
+<button className="nav-item">
+  <span>▨</span> Reports
+</button>
 
         <div className="sidebar-bottom">
           <div className="shop-avatar">K</div>
