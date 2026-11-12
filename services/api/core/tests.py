@@ -1,4 +1,5 @@
 
+from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -200,7 +201,7 @@ class CatalogueAndInventoryTests(TestCase):
             effective_from=timezone.now(),
         )
 
-        self.assertEqual(price.amount, 1000)
+        self.assertEqual(price.amount, Decimal("1000.00"))
 
     def test_shop_can_override_business_product_price(self):
         """A shop can have a different selling price."""
@@ -213,7 +214,7 @@ class CatalogueAndInventoryTests(TestCase):
             effective_from=timezone.now(),
         )
 
-        self.assertEqual(override.amount, 1200)
+        self.assertEqual(override.amount, Decimal("1200.00"))
 
     def test_product_cannot_use_another_business_currency(self):
         """A product price must use its own business's currency."""
@@ -265,8 +266,8 @@ class CatalogueAndInventoryTests(TestCase):
             quantity="20.000",
         )
 
-        self.assertEqual(allocation.quantity, 20)
-        self.assertEqual(balance.quantity, 50)
+        self.assertEqual(allocation.quantity, Decimal("20.000"))
+        self.assertEqual(balance.quantity, Decimal("50.000"))
 
     def test_stock_cannot_be_allocated_to_another_shop(self):
         """A shop cannot allocate stock to another shop's compartment."""
