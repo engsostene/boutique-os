@@ -1,3 +1,4 @@
+
 import uuid
 
 from django.conf import settings
@@ -11,7 +12,7 @@ from django.db import models
 # ============================================================
 
 class BaseModel(models.Model):
-    """Shared identifiers and timestamps for business records."""
+    """Shared UUID identifier and timestamps for business records."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -22,7 +23,7 @@ class BaseModel(models.Model):
 
 
 # ============================================================
-# BUSINESS GROUP AND OPTIONAL GROUP REPORTING
+# BUSINESS GROUP AND GROUP MEMBERSHIP
 # ============================================================
 
 class BusinessGroup(BaseModel):
@@ -101,12 +102,7 @@ class Business(BaseModel):
 
 
 class GroupBusinessLink(BaseModel):
-    """
-    Optional link between a business and a group.
-
-    Reporting access is explicitly configurable. Linking a business
-    to a group does not automatically expose all its information.
-    """
+    """Optional relationship between a business and a business group."""
 
     group = models.ForeignKey(
         BusinessGroup,
@@ -125,9 +121,6 @@ class GroupBusinessLink(BaseModel):
     can_view_customer_details = models.BooleanField(default=False)
     can_approve_requests = models.BooleanField(default=False)
 
-    def __str__(self):
-        return f"{self.business} → {self.group}"
-
     def clean(self):
         if not self.reporting_enabled and any([
             self.can_view_summary,
@@ -139,6 +132,9 @@ class GroupBusinessLink(BaseModel):
             raise ValidationError(
                 "Reporting permissions cannot be enabled when reporting is disabled."
             )
+
+    def __str__(self):
+        return f"{self.business} -> {self.group}"
 
 
 # ============================================================
@@ -235,7 +231,7 @@ class Shop(BaseModel):
 
 
 # ============================================================
-# BUSINESS USERS, ROLES AND PERMISSIONS
+# BUSINESS MEMBERSHIPS, ROLES AND PERMISSIONS
 # ============================================================
 
 class BusinessMembership(BaseModel):
@@ -369,3 +365,456 @@ class MembershipRole(BaseModel):
 
     def __str__(self):
         return f"{self.membership} - {self.role}"
+
+
+# ============================================================
+# BUSINESS CURRENCIES AND EXCHANGE RATES
+# ============================================================
+
+class BusinessCurrency(BaseModel):
+    """Currencies enabled for transactions within a business."""
+
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.PROTECT,
+        related_name="currencies",
+    )
+    currency_code = models.CharField(max_length=3)
+    is_default = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business", "currency_code"],
+                name="unique_currency_per_business",
+            )
+        ]
+
+    def clean(self):
+        if self.currency_code:
+            self.currency_code = self.currency_code.upper()
+
+    def __str__(self):
+        return f"{self.business} - {self.currency_code}"
+
+
+class ExchangeRate(BaseModel):
+    """A recorded exchange rate between two business currencies."""
+
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.PROTECT,
+        related_name="exchange_rates",
+    )
+    from_currency = models.ForeignKey(
+        BusinessCurrency,
+        on_delete=models.PROTECT,
+        related_name="rates_from",
+    )
+    to_currency = models.ForeignKey(
+        BusinessCurrency,
+        on_delete=models.PROTECT,
+        related_name="rates_to",
+    )
+    rate = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(0.00000001)],
+    )
+    effective_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["from_currency", "to_currency", "effective_at"],
+                name="unique_exchange_rate_at_time",
+            )
+        ]
+
+    def clean(self):
+        if self.from_currency_id and self.to_currency_id:
+            if self.from_currency.business_id != self.business_id:
+                raise ValidationError(
+                    "Source currency belongs to another business."
+                )
+            if self.to_currency.business_id != self.business_id:
+                raise ValidationError(
+                    "Target currency belongs to another business."
+                )
+            if self.from_currency_id == self.to_currency_id:
+                raise ValidationError(
+                    "Source and target currencies must differ."
+                )
+
+    def __str__(self):
+        return f"{self.from_currency} -> {self.to_currency}: {self.rate}"
+
+
+# ============================================================
+# PRODUCT CATALOGUE
+# ============================================================
+
+class ProductCategory(BaseModel):
+    """A business-specific way of grouping products."""
+
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.PROTECT,
+        related_name="product_categories",
+    )
+    name = models.CharField(max_length=100)
+    code = models.SlugField(max_length=60)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business", "code"],
+                name="unique_category_code_per_business",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ProductFamily(BaseModel):
+    """An optional parent grouping for related sellable products."""
+
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.PROTECT,
+        related_name="product_families",
+    )
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business", "name"],
+                name="unique_product_family_per_business",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class Product(BaseModel):
+    """A sellable product or variant in the shared business catalogue."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        INACTIVE = "INACTIVE", "Inactive"
+        DISCONTINUED = "DISCONTINUED", "Discontinued"
+
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.PROTECT,
+        related_name="products",
+    )
+    category = models.ForeignKey(
+        ProductCategory,
+        on_delete=models.PROTECT,
+        related_name="products",
+        null=True,
+        blank=True,
+    )
+    family = models.ForeignKey(
+        ProductFamily,
+        on_delete=models.PROTECT,
+        related_name="products",
+        null=True,
+        blank=True,
+    )
+    name = models.CharField(max_length=180)
+    sku = models.CharField(max_length=80)
+    barcode = models.CharField(max_length=100, null=True, blank=True)
+    description = models.TextField(blank=True)
+    base_unit = models.CharField(max_length=30, default="piece")
+    track_stock = models.BooleanField(default=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business", "sku"],
+                name="unique_product_sku_per_business",
+            ),
+            models.UniqueConstraint(
+                fields=["business", "barcode"],
+                condition=models.Q(barcode__isnull=False),
+                name="unique_product_barcode_per_business",
+            ),
+        ]
+
+    def clean(self):
+        if self.category_id and self.category.business_id != self.business_id:
+            raise ValidationError("Category belongs to another business.")
+        if self.family_id and self.family.business_id != self.business_id:
+            raise ValidationError("Product family belongs to another business.")
+
+    def __str__(self):
+        return f"{self.name} ({self.sku})"
+
+
+class ProductAlias(BaseModel):
+    """Alternative names used by shopkeepers to find a product."""
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="aliases",
+    )
+    alias = models.CharField(max_length=150)
+    language_code = models.CharField(max_length=10, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "alias"],
+                name="unique_alias_per_product",
+            )
+        ]
+
+    def __str__(self):
+        return self.alias
+
+
+# ============================================================
+# BUSINESS DEFAULT PRICES AND SHOP PRICE OVERRIDES
+# ============================================================
+
+class ProductPrice(BaseModel):
+    """A default selling price for a product in a business currency."""
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="default_prices",
+    )
+    currency = models.ForeignKey(
+        BusinessCurrency,
+        on_delete=models.PROTECT,
+        related_name="product_prices",
+    )
+    amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+    effective_from = models.DateTimeField()
+    effective_to = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "currency", "effective_from"],
+                name="unique_product_price_start",
+            )
+        ]
+
+    def clean(self):
+        if self.product_id and self.currency_id:
+            if self.product.business_id != self.currency.business_id:
+                raise ValidationError(
+                    "Price currency belongs to another business."
+                )
+        if self.effective_to and self.effective_to <= self.effective_from:
+            raise ValidationError("Price end must be after its start.")
+
+
+class ShopProductPrice(BaseModel):
+    """An optional shop-specific override of the business default price."""
+
+    shop = models.ForeignKey(
+        Shop,
+        on_delete=models.PROTECT,
+        related_name="product_price_overrides",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="shop_price_overrides",
+    )
+    currency = models.ForeignKey(
+        BusinessCurrency,
+        on_delete=models.PROTECT,
+        related_name="shop_prices",
+    )
+    amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+    effective_from = models.DateTimeField()
+    effective_to = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["shop", "product", "currency", "effective_from"],
+                name="unique_shop_product_price_start",
+            )
+        ]
+
+    def clean(self):
+        if self.product_id and self.shop_id and self.currency_id:
+            business_id = self.product.business_id
+            shop_business_id = self.shop.branch.legal_entity.business_id
+
+            if shop_business_id != business_id:
+                raise ValidationError(
+                    "Shop and product belong to different businesses."
+                )
+            if self.currency.business_id != business_id:
+                raise ValidationError(
+                    "Price currency belongs to another business."
+                )
+
+        if self.effective_to and self.effective_to <= self.effective_from:
+            raise ValidationError("Price end must be after its start.")
+
+
+# ============================================================
+# PHYSICAL SHOP LAYOUT
+# ============================================================
+
+class ShopArea(BaseModel):
+    """A named physical area inside a shop."""
+
+    shop = models.ForeignKey(
+        Shop,
+        on_delete=models.PROTECT,
+        related_name="areas",
+    )
+    name = models.CharField(max_length=100)
+    code = models.SlugField(max_length=60)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["shop", "code"],
+                name="unique_area_code_per_shop",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.shop} - {self.name}"
+
+
+class Compartment(BaseModel):
+    """A shelf, cupboard, counter section or other storage position."""
+
+    area = models.ForeignKey(
+        ShopArea,
+        on_delete=models.PROTECT,
+        related_name="compartments",
+    )
+    name = models.CharField(max_length=100)
+    code = models.SlugField(max_length=60)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["area", "code"],
+                name="unique_compartment_code_per_area",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.area} - {self.code}"
+
+
+# ============================================================
+# STOCK BALANCES AND PHYSICAL ALLOCATIONS
+# ============================================================
+
+class StockBalance(BaseModel):
+    """The total recorded stock of one product at one shop."""
+
+    shop = models.ForeignKey(
+        Shop,
+        on_delete=models.PROTECT,
+        related_name="stock_balances",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="stock_balances",
+    )
+    quantity = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        default=0,
+    )
+    reorder_level = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["shop", "product"],
+                name="unique_product_stock_per_shop",
+            )
+        ]
+
+    def clean(self):
+        if self.shop_id and self.product_id:
+            shop_business_id = self.shop.branch.legal_entity.business_id
+            if shop_business_id != self.product.business_id:
+                raise ValidationError(
+                    "Shop and product belong to different businesses."
+                )
+
+    def __str__(self):
+        return f"{self.product} at {self.shop}: {self.quantity}"
+
+
+class StockAllocation(BaseModel):
+    """The portion of a shop's stock held in a physical compartment."""
+
+    stock_balance = models.ForeignKey(
+        StockBalance,
+        on_delete=models.PROTECT,
+        related_name="allocations",
+    )
+    compartment = models.ForeignKey(
+        Compartment,
+        on_delete=models.PROTECT,
+        related_name="stock_allocations",
+    )
+    quantity = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        default=0,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stock_balance", "compartment"],
+                name="unique_stock_allocation_per_compartment",
+            )
+        ]
+
+    def clean(self):
+        if self.stock_balance_id and self.compartment_id:
+            stock_shop_id = self.stock_balance.shop_id
+            compartment_shop_id = self.compartment.area.shop_id
+
+            if stock_shop_id != compartment_shop_id:
+                raise ValidationError(
+                    "Stock can only be allocated to a compartment in the same shop."
+                )
