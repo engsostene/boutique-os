@@ -39,8 +39,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     # Third-party applications
-    'rest_framework',
-    'corsheaders',
+   'rest_framework',
+   'rest_framework.authtoken',  # Stores login tokens used by the React frontend.
+   'corsheaders',
 
     # Boutique OS applications
     'core',
@@ -140,9 +141,13 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 # Django REST Framework configuration
+# DRF connects incoming HTTP requests to our API views.
+# TokenAuthentication identifies the logged-in user from the token
+# sent by React. IsAuthenticated protects private endpoints by default.
 REST_FRAMEWORK = {
-    # API endpoints require authentication by default.
-    # Public endpoints must explicitly opt out.
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+    ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
