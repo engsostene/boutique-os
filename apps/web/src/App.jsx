@@ -206,6 +206,11 @@ function confirmSale() {
   setBasket([]);
 }
 
+// Open the browser's print dialogue for the completed receipt.
+function printReceipt() {
+  window.print();
+}
+
 
   return (
     <div className="app-shell">
