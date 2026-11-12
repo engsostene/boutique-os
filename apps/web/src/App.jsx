@@ -578,12 +578,18 @@ function confirmSale() {
             )}
           </div>
 
-          {invalidPayment && (
-            <p className="payment-error">
-              Check the payment amount, customer name and Mobile Money
-              reference before continuing.
-            </p>
-          )}
+          {/* Display each payment problem separately. */}
+{paymentErrors.length > 0 && (
+  <div className="payment-error" role="alert">
+    <strong>Please check the following:</strong>
+
+    <ul>
+      {paymentErrors.map((error, index) => (
+        <li key={index}>{error}</li>
+      ))}
+    </ul>
+  </div>
+)}
 
           <button
             className="checkout-button confirm-button"
