@@ -671,6 +671,16 @@ function printReceipt() {
             )}
           </div>
 
+          {/* Print the receipt without closing the checkout window. */}
+          <button
+            type="button"
+            className="checkout-button print-button"
+            onClick={printReceipt}
+          >
+            Print receipt
+          </button>
+          
+          {/* Close the receipt and return to the Digital Shop. */}
           <button
             className="checkout-button"
             onClick={() => setCheckoutOpen(false)}
