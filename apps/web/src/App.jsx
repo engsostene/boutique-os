@@ -119,6 +119,22 @@ const invalidPayment =
   (requiresCustomer && !customerName.trim()) ||
   (requiresMobileReference && !mobileReference.trim());
 
+// Build a list of specific problems so the seller knows
+// exactly what needs to be corrected before confirming a sale.
+const paymentErrors = [];
+
+if (paymentMethod !== "cash" && paidTotal > totalPrice) {
+  paymentErrors.push("The payment amount cannot exceed the sale total.");
+}
+
+if (requiresCustomer && !customerName.trim()) {
+  paymentErrors.push("Enter the customer's name for the outstanding balance.");
+}
+
+if (requiresMobileReference && !mobileReference.trim()) {
+  paymentErrors.push("Enter the Mobile Money transaction reference.");
+}
+
 
   function chooseArea(area) {
     setSelectedArea(area.id);
