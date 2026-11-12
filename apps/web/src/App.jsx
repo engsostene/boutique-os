@@ -29,19 +29,41 @@ function formatMoney(amount) {
 }
 
 function App() {
+  // -----------------------------------------
+  // DIGITAL SHOP STATE
+  // -----------------------------------------
+
+  // Controls which shop area and compartment are currently open.
   const [selectedArea, setSelectedArea] = useState("left");
   const [selectedCell, setSelectedCell] = useState("A01");
+
+  // Stores the product search query and current basket.
   const [search, setSearch] = useState("");
   const [basket, setBasket] = useState([]);
 
-const [checkoutOpen, setCheckoutOpen] = useState(false);
-const [paymentMethod, setPaymentMethod] = useState("cash");
-const [amountPaid, setAmountPaid] = useState("0");
-const [cashAmount, setCashAmount] = useState("0");
-const [mobileAmount, setMobileAmount] = useState("0");
-const [customerName, setCustomerName] = useState("");
-const [mobileReference, setMobileReference] = useState("");
-const [completedSale, setCompletedSale] = useState(null);
+  // -----------------------------------------
+  // CHECKOUT STATE
+  // -----------------------------------------
+
+  // Controls whether checkout or the receipt is displayed.
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+
+  // Stores the selected payment method.
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+
+  // Cash or Mobile Money amount, depending on payment method.
+  const [amountPaid, setAmountPaid] = useState("0");
+
+  // Separate amounts for split payments.
+  const [cashAmount, setCashAmount] = useState("0");
+  const [mobileAmount, setMobileAmount] = useState("0");
+
+  // Customer details for credit and Mobile Money reference.
+  const [customerName, setCustomerName] = useState("");
+  const [mobileReference, setMobileReference] = useState("");
+
+  // Stores the completed demonstration sale for receipt display.
+  const [completedSale, setCompletedSale] = useState(null);
 
 
   const currentArea = areas.find((area) => area.id === selectedArea);
@@ -89,8 +111,11 @@ const changeDue =
 const requiresCustomer = outstandingBalance > 0;
 const requiresMobileReference = mobilePaid > 0;
 
+// Prevent invalid payments from being confirmed.
+// Cash overpayment is allowed because the seller must return change.
+// Other payment methods cannot exceed the sale total.
 const invalidPayment =
-  paidTotal > totalPrice ||
+  (paymentMethod !== "cash" && paidTotal > totalPrice) ||
   (requiresCustomer && !customerName.trim()) ||
   (requiresMobileReference && !mobileReference.trim());
 
