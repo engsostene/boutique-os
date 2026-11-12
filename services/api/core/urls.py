@@ -1,7 +1,33 @@
-from django.urls import path
-from .views import health_check
 
+from django.urls import path
+
+from .views import (
+    health_check,
+    business_list,
+    shop_list,
+    category_list,
+    product_list,
+    stock_list,
+)
 
 urlpatterns = [
     path("health/", health_check, name="health-check"),
+
+    path("businesses/", business_list, name="business-list"),
+    path("businesses/<uuid:business_id>/shops/", shop_list, name="shop-list"),
+    path(
+        "businesses/<uuid:business_id>/categories/",
+        category_list,
+        name="category-list",
+    ),
+    path(
+        "businesses/<uuid:business_id>/products/",
+        product_list,
+        name="product-list",
+    ),
+    path(
+        "businesses/<uuid:business_id>/shops/<uuid:shop_id>/stock/",
+        stock_list,
+        name="stock-list",
+    ),
 ]
