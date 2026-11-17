@@ -1,11 +1,15 @@
 
+from decimal import Decimal
+
 from django.shortcuts import get_object_or_404
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import serializers
 
 from .models import Business, BusinessMembership, Shop, Product, ProductCategory, StockBalance
+from .services import confirm_sale
 from .serializers import (
     BusinessSerializer,
     ShopSerializer,
@@ -164,3 +168,48 @@ def stock_list(request, business_id, shop_id):
     ).order_by("product__name")
 
     return Response(StockBalanceSerializer(balances, many=True).data)
+
+
+class SaleItemInputSerializer(serializers.Serializer):
+    product_id = serializers.UUIDField()
+    quantity = serializers.DecimalField(max_digits=14, decimal_places=3, min_value=Decimal("0.001"))
+
+
+class SalePaymentInputSerializer(serializers.Serializer):
+    method = serializers.ChoiceField(choices=["CASH", "MOBILE_MONEY", "BANK"])
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.01"))
+    reference = serializers.CharField(required=False, allow_blank=True, max_length=120)
+
+
+class SaleConfirmationInputSerializer(serializers.Serializer):
+    shop_id = serializers.UUIDField()
+    currency = serializers.CharField(max_length=3)
+    idempotency_key = serializers.UUIDField()
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    items = SaleItemInputSerializer(many=True)
+    payments = SalePaymentInputSerializer(many=True, required=False)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sale_confirm(request, business_id):
+    """Validate the request shape, then delegate business rules to the atomic service."""
+    serializer = SaleConfirmationInputSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    sale, created = confirm_sale(
+        user=request.user, business_id=business_id,
+        shop_id=data["shop_id"], currency_code=data["currency"],
+        idempotency_key=data["idempotency_key"],
+        customer_id=data.get("customer_id"),
+        items=data["items"], payments=data.get("payments", []),
+    )
+    return Response({
+        "id": str(sale.id), "receipt_number": sale.receipt_number,
+        "status": sale.status, "currency": sale.currency.currency_code,
+        "subtotal": str(sale.subtotal), "total": str(sale.total),
+        "amount_paid": str(sale.amount_paid),
+        "pending_payment_total": str(sale.pending_payment_total),
+        "balance_due": str(sale.balance_due),
+        "created": created,
+    }, status=201 if created else 200)

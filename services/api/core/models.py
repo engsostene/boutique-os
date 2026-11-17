@@ -818,3 +818,143 @@ class StockAllocation(BaseModel):
                 raise ValidationError(
                     "Stock can only be allocated to a compartment in the same shop."
                 )
+
+
+# ============================================================
+# CUSTOMERS, SALES, PAYMENTS, STOCK MOVEMENTS AND AUDIT
+# ============================================================
+
+class Customer(BaseModel):
+    """A customer account scoped to one business."""
+    business = models.ForeignKey(Business, on_delete=models.PROTECT, related_name="customers")
+    name = models.CharField(max_length=180)
+    phone = models.CharField(max_length=40, blank=True)
+    email = models.EmailField(blank=True)
+    credit_limit = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["business", "phone"], condition=~models.Q(phone=""), name="unique_customer_phone_per_business")]
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Sale(BaseModel):
+    """A confirmed checkout; child records are created in one database transaction."""
+    class Status(models.TextChoices):
+        CONFIRMED = "CONFIRMED", "Confirmed"
+        REVERSED = "REVERSED", "Reversed"
+
+    business = models.ForeignKey(Business, on_delete=models.PROTECT, related_name="sales")
+    shop = models.ForeignKey(Shop, on_delete=models.PROTECT, related_name="sales")
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="sales", null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_sales")
+    receipt_number = models.CharField(max_length=40, unique=True)
+    idempotency_key = models.UUIDField(unique=True)
+    currency = models.ForeignKey(BusinessCurrency, on_delete=models.PROTECT, related_name="sales")
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2)
+    discount_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=14, decimal_places=2)
+    amount_paid = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    pending_payment_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    balance_due = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.CONFIRMED)
+    confirmed_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-confirmed_at"]
+
+    def __str__(self):
+        return self.receipt_number
+
+
+class SaleItem(BaseModel):
+    """Immutable product and price snapshot for a line on a sale."""
+    sale = models.ForeignKey(Sale, on_delete=models.PROTECT, related_name="items")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="sale_items")
+    product_name = models.CharField(max_length=180)
+    sku = models.CharField(max_length=80)
+    quantity = models.DecimalField(max_digits=14, decimal_places=3, validators=[MinValueValidator(0.001)])
+    unit_price = models.DecimalField(max_digits=14, decimal_places=2)
+    line_total = models.DecimalField(max_digits=14, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.product_name} x {self.quantity}"
+
+
+class Payment(BaseModel):
+    """Money actually received; credit is represented by the customer ledger."""
+    class Method(models.TextChoices):
+        CASH = "CASH", "Cash"
+        MOBILE_MONEY = "MOBILE_MONEY", "Mobile Money"
+        BANK = "BANK", "Bank transfer"
+
+    class Status(models.TextChoices):
+        RECORDED = "RECORDED", "Recorded"
+        PENDING = "PENDING", "Pending provider confirmation"
+        CONFIRMED = "CONFIRMED", "Provider confirmed"
+        FAILED = "FAILED", "Failed"
+        REVERSED = "REVERSED", "Reversed"
+
+    sale = models.ForeignKey(Sale, on_delete=models.PROTECT, related_name="payments")
+    method = models.CharField(max_length=20, choices=Method.choices)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(0.01)])
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RECORDED)
+    reference = models.CharField(max_length=120, blank=True)
+    received_at = models.DateTimeField()
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="recorded_payments")
+
+    def __str__(self):
+        return f"{self.sale.receipt_number}: {self.amount} {self.method}"
+
+
+class CustomerLedgerEntry(BaseModel):
+    """Append-only customer account entry; positive amounts increase debt."""
+    class EntryType(models.TextChoices):
+        SALE_CREDIT = "SALE_CREDIT", "Sale on credit"
+        REPAYMENT = "REPAYMENT", "Customer repayment"
+        ADJUSTMENT = "ADJUSTMENT", "Authorized adjustment"
+        REVERSAL = "REVERSAL", "Reversal"
+
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="ledger_entries")
+    sale = models.ForeignKey(Sale, on_delete=models.PROTECT, related_name="ledger_entries", null=True, blank=True)
+    entry_type = models.CharField(max_length=20, choices=EntryType.choices)
+    currency = models.ForeignKey(BusinessCurrency, on_delete=models.PROTECT, related_name="customer_ledger_entries")
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    description = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="customer_ledger_entries")
+
+    class Meta:
+        ordering = ["created_at"]
+
+
+class StockMovement(BaseModel):
+    """Append-only record explaining every stock quantity change."""
+    class MovementType(models.TextChoices):
+        SALE = "SALE", "Sale"
+        RECEIPT = "RECEIPT", "Stock receipt"
+        ADJUSTMENT = "ADJUSTMENT", "Adjustment"
+        RETURN = "RETURN", "Return"
+        TRANSFER_IN = "TRANSFER_IN", "Transfer in"
+        TRANSFER_OUT = "TRANSFER_OUT", "Transfer out"
+
+    shop = models.ForeignKey(Shop, on_delete=models.PROTECT, related_name="stock_movements")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="stock_movements")
+    sale = models.ForeignKey(Sale, on_delete=models.PROTECT, related_name="stock_movements", null=True, blank=True)
+    movement_type = models.CharField(max_length=20, choices=MovementType.choices)
+    quantity_delta = models.DecimalField(max_digits=14, decimal_places=3)
+    balance_after = models.DecimalField(max_digits=14, decimal_places=3)
+    note = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="stock_movements")
+
+
+class AuditLog(BaseModel):
+    """Trace important business actions without exposing secrets in logs."""
+    business = models.ForeignKey(Business, on_delete=models.PROTECT, related_name="audit_logs")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="business_audit_logs")
+    action = models.CharField(max_length=80)
+    object_type = models.CharField(max_length=80)
+    object_id = models.CharField(max_length=64)
+    summary = models.CharField(max_length=255, blank=True)

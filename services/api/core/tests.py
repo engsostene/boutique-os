@@ -1,5 +1,6 @@
 
 from decimal import Decimal
+from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -26,7 +27,9 @@ from .models import (
     ShopProductPrice,
     StockAllocation,
     StockBalance,
+    Customer, Sale, SaleItem, Payment, CustomerLedgerEntry, StockMovement, AuditLog,
 )
+from .services import confirm_sale
 
 
 User = get_user_model()
@@ -304,3 +307,118 @@ class CatalogueAndInventoryTests(TestCase):
 
         with self.assertRaises(ValidationError):
             allocation.full_clean()
+
+
+class SaleTransactionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="seller", password="test-password")
+        self.business = Business.objects.create(name="Sales Test Business", code="sales-test-business")
+        self.entity = LegalEntity.objects.create(business=self.business, legal_name="Sales Test Ltd")
+        self.branch = Branch.objects.create(legal_entity=self.entity, name="Main", code="main")
+        self.shop = Shop.objects.create(branch=self.branch, name="Main Shop", code="main-shop")
+        self.membership = BusinessMembership.objects.create(
+            business=self.business, user=self.user, status=BusinessMembership.Status.ACTIVE,
+        )
+        self.currency = BusinessCurrency.objects.create(
+            business=self.business, currency_code="RWF", is_default=True,
+        )
+        self.product = Product.objects.create(
+            business=self.business, name="Test Shirt", sku="SHIRT-001", track_stock=True,
+        )
+        ProductPrice.objects.create(
+            product=self.product, currency=self.currency, amount="5000.00",
+            effective_from=timezone.now() - timedelta(days=1),
+        )
+        self.stock = StockBalance.objects.create(
+            shop=self.shop, product=self.product, quantity="10.000",
+        )
+        self.customer = Customer.objects.create(
+            business=self.business, name="Test Customer", phone="0780000000",
+            credit_limit="20000.00",
+        )
+
+    def _sale(self, **overrides):
+        from uuid import uuid4
+        payload = {
+            "user": self.user, "business_id": self.business.id,
+            "shop_id": self.shop.id, "currency_code": "RWF",
+            "idempotency_key": uuid4(),
+            "items": [{"product_id": self.product.id, "quantity": "2.000"}],
+            "payments": [{"method": "CASH", "amount": "5000.00"}],
+            "customer_id": self.customer.id,
+        }
+        payload.update(overrides)
+        return confirm_sale(**payload)
+
+    def test_sale_creates_linked_records_and_deducts_stock(self):
+        sale, created = self._sale()
+        self.assertTrue(created)
+        self.assertEqual(sale.total, Decimal("10000.00"))
+        self.assertEqual(sale.balance_due, Decimal("5000.00"))
+        self.assertEqual(self.stock.__class__.objects.get(pk=self.stock.pk).quantity, Decimal("8.000"))
+        self.assertEqual(SaleItem.objects.filter(sale=sale).count(), 1)
+        self.assertEqual(Payment.objects.filter(sale=sale).count(), 1)
+        self.assertEqual(CustomerLedgerEntry.objects.filter(sale=sale).count(), 1)
+        self.assertEqual(StockMovement.objects.filter(sale=sale).count(), 1)
+        self.assertEqual(AuditLog.objects.filter(object_id=str(sale.id)).count(), 1)
+
+    def test_insufficient_stock_creates_no_sale(self):
+        from rest_framework.exceptions import ValidationError as APIValidationError
+        with self.assertRaises(APIValidationError):
+            self._sale(items=[{"product_id": self.product.id, "quantity": "99.000"}])
+        self.assertEqual(Sale.objects.count(), 0)
+        self.assertEqual(self.stock.__class__.objects.get(pk=self.stock.pk).quantity, Decimal("10.000"))
+
+    def test_mobile_money_reference_is_pending_not_settled(self):
+        sale, _ = self._sale(
+            payments=[{"method": "MOBILE_MONEY", "amount": "10000.00", "reference": "MM-REF-1"}],
+        )
+        payment = Payment.objects.get(sale=sale)
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertEqual(sale.amount_paid, Decimal("0.00"))
+        self.assertEqual(sale.pending_payment_total, Decimal("10000.00"))
+        self.assertEqual(sale.balance_due, Decimal("0.00"))
+
+    def test_same_idempotency_key_does_not_create_duplicate_sale(self):
+        from uuid import uuid4
+        key = uuid4()
+        first, created_first = self._sale(idempotency_key=key)
+        second, created_second = self._sale(idempotency_key=key)
+        self.assertTrue(created_first)
+        self.assertFalse(created_second)
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(Sale.objects.count(), 1)
+
+    def test_idempotency_key_collision_never_returns_another_business_sale(self):
+        from uuid import uuid4
+        from rest_framework.exceptions import ValidationError as APIValidationError
+
+        foreign_user = User.objects.create_user(username="foreign-seller", password="test-password")
+        foreign_business = Business.objects.create(name="Foreign Business", code="foreign-business")
+        foreign_entity = LegalEntity.objects.create(business=foreign_business, legal_name="Foreign Ltd")
+        foreign_branch = Branch.objects.create(legal_entity=foreign_entity, name="Foreign Branch", code="foreign")
+        foreign_shop = Shop.objects.create(branch=foreign_branch, name="Foreign Shop", code="foreign-shop")
+        foreign_currency = BusinessCurrency.objects.create(
+            business=foreign_business, currency_code="RWF", is_default=True,
+        )
+        key = uuid4()
+        foreign_sale = Sale.objects.create(
+            business=foreign_business,
+            shop=foreign_shop,
+            created_by=foreign_user,
+            receipt_number="FOREIGN-RECEIPT-001",
+            idempotency_key=key,
+            currency=foreign_currency,
+            subtotal="100.00",
+            total="100.00",
+            amount_paid="100.00",
+            pending_payment_total="0.00",
+            balance_due="0.00",
+            confirmed_at=timezone.now(),
+        )
+
+        with self.assertRaises(APIValidationError):
+            self._sale(idempotency_key=key)
+
+        self.assertEqual(Sale.objects.count(), 1)
+        self.assertTrue(Sale.objects.filter(pk=foreign_sale.pk, business=foreign_business).exists())
