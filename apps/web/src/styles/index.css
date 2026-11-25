@@ -1,0 +1,9 @@
+/* Imports every stylesheet in the same order as the original App.css.
+   The order matters: later files can override earlier ones. */
+@import "./01-sidebar.css";
+@import "./02-topbar-areas.css";
+@import "./03-digital-shop.css";
+@import "./04-basket.css";
+@import "./05-responsive.css";
+@import "./06-checkout-receipt.css";
+@import "./07-small-screen-print.css";

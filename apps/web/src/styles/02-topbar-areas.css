@@ -1,0 +1,179 @@
+/* 02 · Top bar and shop areas
+   Page header, section headings and the row of shop-area buttons. */
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+  padding: 29px 35px 40px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 26px;
+  border-bottom: 1px solid #e8ece7;
+}
+
+.breadcrumb {
+  font-size: 10px;
+  color: #829087;
+  margin-bottom: 10px;
+}
+
+.topbar h2 {
+  font-size: 23px;
+  margin: 0;
+  letter-spacing: -0.8px;
+}
+
+.topbar h2 span {
+  font-size: 18px;
+}
+
+.topbar p,
+.shop-heading p {
+  color: #849087;
+  font-size: 11px;
+  margin: 6px 0 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.connection-status {
+  color: #587361;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3eaa70;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5eae4;
+  border-radius: 50%;
+  background: white;
+  color: #53665a;
+}
+
+.user-avatar {
+  background: #dce8d9;
+}
+
+.shop-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 27px 0 24px;
+}
+
+.eyebrow {
+  font-size: 9px;
+  color: #72907c;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.shop-heading h3 {
+  font-size: 20px;
+  margin: 7px 0 0;
+  letter-spacing: -0.5px;
+}
+
+.mode-button {
+  background: #e7efe7;
+  color: #315b40;
+  border: 1px solid #dce7dc;
+  border-radius: 8px;
+  padding: 10px 13px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.mode-button span {
+  margin-left: 10px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-heading h3,
+.basket-heading h3 {
+  font-size: 13px;
+  margin: 0 0 5px;
+}
+
+.section-heading > div > span,
+.basket-heading > div > span {
+  color: #89948c;
+  font-size: 10px;
+}
+
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #39734d;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.area-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 15px 0 28px;
+}
+
+.area-card {
+  min-width: 0;
+  background: white;
+  border: 1px solid #e7ece6;
+  border-radius: 10px;
+  padding: 13px 12px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.area-card:hover,
+.area-card.selected {
+  border-color: #477d59;
+  background: #f0f6ef;
+}
+
+.area-icon {
+  font-size: 20px;
+  color: #4b7657;
+  margin-bottom: 3px;
+}
+
+.area-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #334238;
+}
+
+.area-count {
+  font-size: 9px;
+  color: #8a958d;
+}
+

@@ -1,0 +1,140 @@
+/* 01 · Sidebar
+   App shell and the left navigation (brand, menu items, shop name at the bottom). */
+
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+}
+
+.sidebar {
+  width: 238px;
+  flex-shrink: 0;
+  background: #173c2d;
+  color: #fff;
+  padding: 27px 17px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 7px;
+  margin-bottom: 48px;
+}
+
+.brand-mark {
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  background: #d7e7d7;
+  color: #173c2d;
+  border-radius: 12px;
+  font-size: 23px;
+  font-weight: 800;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.5px;
+}
+
+.brand span {
+  display: block;
+  color: #a9c0b2;
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  margin-top: 4px;
+}
+
+.sidebar-label {
+  color: #91ad9c;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  padding: 0 10px;
+  margin-bottom: 12px;
+}
+
+.management-label {
+  margin-top: 34px;
+}
+
+.nav-item {
+  border: 0;
+  background: transparent;
+  color: #d3e0d7;
+  width: 100%;
+  padding: 12px 11px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border-radius: 8px;
+  font-size: 12px;
+  text-align: left;
+  margin-bottom: 5px;
+}
+
+.nav-item > span {
+  font-size: 17px;
+  width: 20px;
+  text-align: center;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  background: #2d5844;
+  color: #fff;
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  padding: 18px 3px 0;
+  border-top: 1px solid #426451;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.shop-avatar,
+.user-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #dce9d8;
+  color: #234b37;
+  font-weight: 700;
+}
+
+.shop-user {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.shop-user strong {
+  font-size: 10px;
+}
+
+.shop-user span {
+  font-size: 9px;
+  color: #a9c0b2;
+}
+
+.more-icon {
+  margin-left: auto;
+  letter-spacing: 2px;
+  color: #c0d1c6;
+}
+

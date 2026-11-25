@@ -1,0 +1,46 @@
+/* 07 · Small-phone rules and printing
+   Checkout on very small screens, and the print layout for receipts. */
+
+@media (max-width: 480px) {
+  .checkout-modal {
+    padding: 17px;
+  }
+
+  .split-fields {
+    grid-template-columns: 1fr;
+  }
+}
+/* Prepare a clean receipt when the browser opens print preview. */
+@media print {
+  /* Hide the entire application before selecting the receipt. */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Make the receipt and its contents visible again. */
+  .receipt,
+  .receipt * {
+    visibility: visible;
+  }
+
+  /* Position the receipt independently of the application layout. */
+  .receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    max-width: 100%;
+    margin: 0;
+    padding: 10mm;
+    box-sizing: border-box;
+    background: white;
+    color: black;
+    box-shadow: none;
+  }
+
+  /* Remove unnecessary page margins and background colours. */
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+} 
